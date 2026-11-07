@@ -18,15 +18,15 @@ Both are clean templates: no credentials, and no connection IDs, projects, users
 ```
 Dynatrace Intelligence problem (CREATED / UPDATED / REOPENED)
         │
-        ├─► buscar_incidente_existente   JQL by problem ID (summary or label)
-        └─► resumen_del_incidente        2-sentence AI summary (optional)
+        ├─► search_existing_incident   JQL by problem ID (summary or label)
+        └─► incident_summary        2-sentence AI summary (optional)
                     │
         ┌───────────┴────────────┐
    no ticket found?         ticket found?
         │                        │
- crear_incidente_jira    comentar_incidente_existente
+ create_jira_incident    comment_on_existing_incident
         │
- anotar_problema_con_jira   (Jira link → problem in Dynatrace)
+ annotate_problem_with_jira   (Jira link → problem in Dynatrace)
 ```
 
 1. **Trigger:** active Dynatrace Intelligence problems (availability, error, slowdown, resource contention, custom alert and monitoring unavailable), excluding duplicates.
@@ -49,15 +49,15 @@ Dynatrace Intelligence problem (CREATED / UPDATED / REOPENED)
    ```
 
 3. In the created workflow, fill in:
-   - **Jira connection** in `buscar_incidente_existente`, `comentar_incidente_existente` and `crear_incidente_jira`.
-   - **Project** and **issue type** in `crear_incidente_jira`. Optional: priority, assignee and reporter.
+   - **Jira connection** in `search_existing_incident`, `comment_on_existing_incident` and `create_jira_incident`.
+   - **Project** and **issue type** in `create_jira_incident`. Optional: priority, assignee and reporter.
 4. Test with a manual run using a real problem and check the ticket.
 5. Activate the trigger.
 
 ## Notes
 
-- The search does not filter by project. If you need that, add `project = "KEY" AND` to the JQL in `buscar_incidente_existente`.
-- Summary timestamps are requested in UTC-5. Change the time zone in the `resumen_del_incidente` instruction if needed.
-- The `resumen_del_incidente` prompt must stay short: with a long prompt, Dynatrace Assist replied that it was not a valid question. Formatting rules belong in the instruction field.
+- The search does not filter by project. If you need that, add `project = "KEY" AND` to the JQL in `search_existing_incident`.
+- Summary timestamps are requested in UTC-5. Change the time zone in the `incident_summary` instruction if needed.
+- The `incident_summary` prompt must stay short: with a long prompt, Dynatrace Assist replied that it was not a valid question. Formatting rules belong in the instruction field.
 - The problem link is built from `environment().url`, so it works on any tenant.
-- Task names are in Spanish in both versions so the guide and conditions match.
+- Task names in this README are the English ones. The Spanish version keeps Spanish names: `buscar_incidente_existente`, `resumen_del_incidente`, `comentar_incidente_existente`, `crear_incidente_jira` and `anotar_problema_con_jira`.

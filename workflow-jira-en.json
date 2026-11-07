@@ -33,35 +33,35 @@
   },
   "type": "STANDARD",
   "hourlyExecutionLimit": 1000,
-  "guide": "# Dynatrace problems → Jira incident\n\nCreates a Jira incident when a Dynatrace Intelligence problem opens, with a short AI-generated summary in English, and comments on the existing ticket if the problem recurs.\n\n# Prerequisites\n1. A Jira connection (Dynatrace Jira app) with permission to search and create issues.\n2. Assign the connection in `buscar_incidente_existente`, `comentar_incidente_existente` and `crear_incidente_jira`.\n3. In `crear_incidente_jira` pick the project and issue type (and optionally priority).\n4. Activate the trigger when everything is ready.\n\n# Flow\n- `buscar_incidente_existente`: JQL by problem ID (summary or label).\n- `resumen_del_incidente`: short AI summary (optional: if it fails, the ticket is still created).\n- `comentar_incidente_existente`: if an open ticket exists, adds a recurrence comment.\n- `crear_incidente_jira`: if there is no ticket, creates one.\n- `anotar_problema_con_jira`: adds the ticket link to the problem in Dynatrace.\n",
+  "guide": "# Dynatrace problems → Jira incident\n\nCreates a Jira incident when a Dynatrace Intelligence problem opens, with a short AI-generated summary in English, and comments on the existing ticket if the problem recurs.\n\n# Prerequisites\n1. A Jira connection (Dynatrace Jira app) with permission to search and create issues.\n2. Assign the connection in `search_existing_incident`, `comment_on_existing_incident` and `create_jira_incident`.\n3. In `create_jira_incident` pick the project and issue type (and optionally priority).\n4. Activate the trigger when everything is ready.\n\n# Flow\n- `search_existing_incident`: JQL by problem ID (summary or label).\n- `incident_summary`: short AI summary (optional: if it fails, the ticket is still created).\n- `comment_on_existing_incident`: if an open ticket exists, adds a recurrence comment.\n- `create_jira_incident`: if there is no ticket, creates one.\n- `annotate_problem_with_jira`: adds the ticket link to the problem in Dynatrace.\n",
   "tasks": {
-    "anotar_problema_con_jira": {
+    "annotate_problem_with_jira": {
       "action": "dynatrace.davis.problems:annotate-and-link",
       "active": true,
       "conditions": {
-        "custom": "{{ result(\"crear_incidente_jira\") | length != 0 }}",
+        "custom": "{{ result(\"create_jira_incident\") | length != 0 }}",
         "states": {
-          "crear_incidente_jira": "OK"
+          "create_jira_incident": "OK"
         }
       },
       "description": "Links the Jira incident to the problem in Dynatrace",
       "input": {
         "annotationSource": "Workflow automation",
-        "eventDescription": "#### Added by workflow automation\n\n- Jira ticket: [{{ result(\"crear_incidente_jira\")[\"key\"] }}]({{ result(\"crear_incidente_jira\")[\"url\"] }})\n",
-        "eventName": "Jira: {{ result(\"crear_incidente_jira\")[\"key\"] }} - {{ event()[\"event.name\"] }}",
+        "eventDescription": "#### Added by workflow automation\n\n- Jira ticket: [{{ result(\"create_jira_incident\")[\"key\"] }}]({{ result(\"create_jira_incident\")[\"url\"] }})\n",
+        "eventName": "Jira: {{ result(\"create_jira_incident\")[\"key\"] }} - {{ event()[\"event.name\"] }}",
         "problemId": "{{ event()[\"event.id\"] }}",
-        "url": "{{ result(\"crear_incidente_jira\")[\"url\"] }}"
+        "url": "{{ result(\"create_jira_incident\")[\"url\"] }}"
       },
-      "name": "anotar_problema_con_jira",
+      "name": "annotate_problem_with_jira",
       "position": {
         "x": 1,
         "y": 3
       },
       "predecessors": [
-        "crear_incidente_jira"
+        "create_jira_incident"
       ]
     },
-    "buscar_incidente_existente": {
+    "search_existing_incident": {
       "action": "dynatrace.jira:jira-jql-search",
       "description": "Searches Jira for an open incident for this problem",
       "input": {
@@ -70,56 +70,56 @@
         "fields": [],
         "jql": "statusCategory != Done\nAND (\n  summary ~ \"{{ event()['display_id'] }}\"\n  OR labels = \"{{ event()['display_id'] }}\"\n)"
       },
-      "name": "buscar_incidente_existente",
+      "name": "search_existing_incident",
       "position": {
         "x": -1,
         "y": 1
       },
       "predecessors": []
     },
-    "comentar_incidente_existente": {
+    "comment_on_existing_incident": {
       "action": "dynatrace.jira:jira-add-comment",
       "active": true,
       "conditions": {
-        "custom": "{{ result(\"buscar_incidente_existente\") | length != 0 }}",
+        "custom": "{{ result(\"search_existing_incident\") | length != 0 }}",
         "else": "SKIP",
         "states": {
-          "buscar_incidente_existente": "OK",
-          "resumen_del_incidente": "ANY"
+          "search_existing_incident": "OK",
+          "incident_summary": "ANY"
         }
       },
       "description": "Adds a recurrence comment to the existing incident",
       "input": {
-        "comment": "h3. Problem recurrence detected\n\n{% set r = result(\"resumen_del_incidente\") %}{% set s = r[\"text\"] if (r and r[\"text\"]) else \"\" %}{% if s and \"sorry\" not in s[:40] %}*Summary:* {{ s.split(\"*Note\")[0].split(\"Note\")[0].split(\"---\")[0] | trim | replace(\"**\",\"*\") }}\n{% endif %}\nA new occurrence of this problem was detected.\n\n*Problem ID:* {{ event()[\"display_id\"] }}\n*Name:* {{ event()[\"event.name\"] }}\n*Status:* {{ event()[\"event.status\"] }}\n*Category:* {{ event()[\"event.category\"] }}\n*Detected:* {{ event()[\"timestamp\"] }}\n*View problem in DT:* [{{ event()[\"display_id\"] }}|{{ environment().url }}/ui/apps/dynatrace.davis.problems/problem/{{ event()[\"event.id\"] }}]\n\n----\n\n{{ event()[\"event.description\"] }}\n",
+        "comment": "h3. Problem recurrence detected\n\n{% set r = result(\"incident_summary\") %}{% set s = r[\"text\"] if (r and r[\"text\"]) else \"\" %}{% if s and \"sorry\" not in s[:40] %}*Summary:* {{ s.split(\"*Note\")[0].split(\"Note\")[0].split(\"---\")[0] | trim | replace(\"**\",\"*\") }}\n{% endif %}\nA new occurrence of this problem was detected.\n\n*Problem ID:* {{ event()[\"display_id\"] }}\n*Name:* {{ event()[\"event.name\"] }}\n*Status:* {{ event()[\"event.status\"] }}\n*Category:* {{ event()[\"event.category\"] }}\n*Detected:* {{ event()[\"timestamp\"] }}\n*View problem in DT:* [{{ event()[\"display_id\"] }}|{{ environment().url }}/ui/apps/dynatrace.davis.problems/problem/{{ event()[\"event.id\"] }}]\n\n----\n\n{{ event()[\"event.description\"] }}\n",
         "connectionId": "",
-        "issueID": "{{ result(\"buscar_incidente_existente\")[0][\"key\"] }}"
+        "issueID": "{{ result(\"search_existing_incident\")[0][\"key\"] }}"
       },
-      "name": "comentar_incidente_existente",
+      "name": "comment_on_existing_incident",
       "position": {
         "x": 0,
         "y": 2
       },
       "predecessors": [
-        "buscar_incidente_existente",
-        "resumen_del_incidente"
+        "search_existing_incident",
+        "incident_summary"
       ]
     },
-    "crear_incidente_jira": {
+    "create_jira_incident": {
       "action": "dynatrace.jira:jira-create-issue",
       "active": true,
       "conditions": {
-        "custom": "{{ result(\"buscar_incidente_existente\") | length == 0 }}",
+        "custom": "{{ result(\"search_existing_incident\") | length == 0 }}",
         "else": "SKIP",
         "states": {
-          "buscar_incidente_existente": "OK",
-          "resumen_del_incidente": "ANY"
+          "search_existing_incident": "OK",
+          "incident_summary": "ANY"
         }
       },
       "description": "Creates the Jira incident when no open one exists",
       "input": {
         "components": [],
         "connectionId": "",
-        "description": "{% set r = result(\"resumen_del_incidente\") %}{% set s = r[\"text\"] if (r and r[\"text\"]) else \"\" %}{% if s and \"sorry\" not in s[:40] %}h2. Summary\n\n{{ s.split(\"*Note\")[0].split(\"Note\")[0].split(\"---\")[0] | trim | replace(\"**\",\"*\") }}\n\n----\n\n{% endif %}h2. Problem overview\n\n*Problem ID:* {{ event()[\"display_id\"] }}\n*Name:* {{ event()[\"event.name\"] }}\n*Status:* {{ event()[\"event.status\"] }}\n*Category:* {{ event()[\"event.category\"] }}\n*Start:* {{ event()[\"event.start\"] }}\n*View problem in DT:* [{{ event()[\"display_id\"] }}|{{ environment().url }}/ui/apps/dynatrace.davis.problems/problem/{{ event()[\"event.id\"] }}]\n\n----\n\nh2. Impact\n\n*Affected entity types:* {{ event()[\"affected_entity_types\"] | join(\", \") }}\n*Affected entity IDs:* {{ event()[\"affected_entity_ids\"] | join(\", \") }}\n*Impact level:* {{ event()[\"dt.davis.impact_level\"] | join(\", \") }}\n\n----\n\nh2. Details\n\n{{ event()[\"event.description\"] }}\n\n----\n\nh2. Metadata\n\n*Under maintenance:* {{ event()[\"maintenance.is_under_maintenance\"] }}\n*Frequent event:* {{ event()[\"dt.davis.is_frequent_event\"] }}\n*Related event IDs:* {{ event()[\"dt.davis.event_ids\"] | join(\", \") }}\n",
+        "description": "{% set r = result(\"incident_summary\") %}{% set s = r[\"text\"] if (r and r[\"text\"]) else \"\" %}{% if s and \"sorry\" not in s[:40] %}h2. Summary\n\n{{ s.split(\"*Note\")[0].split(\"Note\")[0].split(\"---\")[0] | trim | replace(\"**\",\"*\") }}\n\n----\n\n{% endif %}h2. Problem overview\n\n*Problem ID:* {{ event()[\"display_id\"] }}\n*Name:* {{ event()[\"event.name\"] }}\n*Status:* {{ event()[\"event.status\"] }}\n*Category:* {{ event()[\"event.category\"] }}\n*Start:* {{ event()[\"event.start\"] }}\n*View problem in DT:* [{{ event()[\"display_id\"] }}|{{ environment().url }}/ui/apps/dynatrace.davis.problems/problem/{{ event()[\"event.id\"] }}]\n\n----\n\nh2. Impact\n\n*Affected entity types:* {{ event()[\"affected_entity_types\"] | join(\", \") }}\n*Affected entity IDs:* {{ event()[\"affected_entity_ids\"] | join(\", \") }}\n*Impact level:* {{ event()[\"dt.davis.impact_level\"] | join(\", \") }}\n\n----\n\nh2. Details\n\n{{ event()[\"event.description\"] }}\n\n----\n\nh2. Metadata\n\n*Under maintenance:* {{ event()[\"maintenance.is_under_maintenance\"] }}\n*Frequent event:* {{ event()[\"dt.davis.is_frequent_event\"] }}\n*Related event IDs:* {{ event()[\"dt.davis.event_ids\"] | join(\", \") }}\n",
         "fieldSetters": [],
         "issueType": {
           "id": ""
@@ -133,17 +133,17 @@
         },
         "summary": "[{{ event()[\"display_id\"] }}] {{ event()[\"event.name\"] }}"
       },
-      "name": "crear_incidente_jira",
+      "name": "create_jira_incident",
       "position": {
         "x": 1,
         "y": 2
       },
       "predecessors": [
-        "buscar_incidente_existente",
-        "resumen_del_incidente"
+        "search_existing_incident",
+        "incident_summary"
       ]
     },
-    "resumen_del_incidente": {
+    "incident_summary": {
       "action": "dynatrace.davis.workflow.actions:prompt-generative-ai",
       "description": "Generates a very short AI summary of the problem in English",
       "input": {
@@ -153,7 +153,7 @@
         "prompt": "Summarize this Dynatrace problem",
         "supplementary": "Problem ID: {{ event()[\"display_id\"] }}\nName: {{ event()[\"event.name\"] }}\nCategory: {{ event()[\"event.category\"] }}\nStatus: {{ event()[\"event.status\"] }}\nStart: {{ event()[\"event.start\"] }}\nAffected entity types: {{ event()[\"affected_entity_types\"] | join(\", \") }}\nAffected entities: {{ event()[\"affected_entity_ids\"] | join(\", \") }}\nImpact level: {{ event()[\"dt.davis.impact_level\"] | join(\", \") }}\nDescription: {{ event()[\"event.description\"] }}"
       },
-      "name": "resumen_del_incidente",
+      "name": "incident_summary",
       "position": {
         "x": 1,
         "y": 1
