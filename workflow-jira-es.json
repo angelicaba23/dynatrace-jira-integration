@@ -1,0 +1,164 @@
+{
+  "title": "[Jira] Crea un incidente a partir de un problema",
+  "description": "Crea un incidente en Jira por cada problema activo de Dynatrace Intelligence con un resumen corto generado por IA; si ya existe uno abierto, agrega un comentario de recurrencia. Enlaza el ticket al problema en Dynatrace.",
+  "schemaVersion": 4,
+  "trigger": {
+    "eventTrigger": {
+      "filterQuery": "event.kind == \"DAVIS_PROBLEM\" AND event.status == \"ACTIVE\" AND matchesValue(event.status_transition, {\"CREATED\", \"UPDATED\", \"REOPENED\"}) AND dt.analysis.ready == true AND (matchesValue(event.category, {\"MONITORING_UNAVAILABLE\", \"AVAILABILITY\", \"ERROR\", \"SLOWDOWN\", \"RESOURCE_CONTENTION\", \"CUSTOM_ALERT\"})) AND (dt.davis.is_duplicate == false)",
+      "isActive": false,
+      "triggerConfiguration": {
+        "type": "davis-problem",
+        "value": {
+          "analysisReady": true,
+          "categories": {
+            "availability": true,
+            "custom": true,
+            "error": true,
+            "monitoringUnavailable": true,
+            "resource": true,
+            "slowdown": true
+          },
+          "customFilter": "dt.davis.is_duplicate == false",
+          "entityTags": {},
+          "entityTagsMatch": "all",
+          "onProblemClose": false,
+          "problemOpenDuration": null,
+          "severityThreshold": null,
+          "triggerOn": null,
+          "triggerOnUpdateFields": []
+        }
+      },
+      "uniqueExpression": "{{ event()[\"event.id\"] }}-{{ \"open\" if event()[\"event.status\"] == \"ACTIVE\" else \"resolved\" }}-{{ event()[\"dt.davis.last_reopen_timestamp\"] }}"
+    }
+  },
+  "type": "STANDARD",
+  "hourlyExecutionLimit": 1000,
+  "guide": "# Problemas de Dynatrace → Incidente en Jira\n\nCrea un incidente en Jira cuando se abre un problema de Dynatrace Intelligence, con un resumen corto en español generado por IA, y comenta el ticket existente si el problema se repite.\n\n# Configuración previa\n1. Tener una conexión Jira (app Jira de Dynatrace) con permisos para buscar y crear issues.\n2. Asignar la conexión en `buscar_incidente_existente`, `comentar_incidente_existente` y `crear_incidente_jira`.\n3. En `crear_incidente_jira` elegir proyecto y tipo de issue (y, si quieres, prioridad).\n4. Activar el trigger cuando todo esté listo.\n\n# Flujo\n- `buscar_incidente_existente`: JQL por ID del problema (summary o label).\n- `resumen_del_incidente`: resumen corto con IA (opcional: si falla, el ticket se crea igual).\n- `comentar_incidente_existente`: si hay ticket abierto, agrega comentario de recurrencia.\n- `crear_incidente_jira`: si no hay ticket, lo crea.\n- `anotar_problema_con_jira`: agrega el enlace del ticket al problema en Dynatrace.\n",
+  "tasks": {
+    "anotar_problema_con_jira": {
+      "action": "dynatrace.davis.problems:annotate-and-link",
+      "active": true,
+      "conditions": {
+        "custom": "{{ result(\"crear_incidente_jira\") | length != 0 }}",
+        "states": {
+          "crear_incidente_jira": "OK"
+        }
+      },
+      "description": "Enlaza el incidente de Jira al problema en Dynatrace",
+      "input": {
+        "annotationSource": "Workflow automation",
+        "eventDescription": "#### Agregado por workflow automation\n\n- Ticket Jira: [{{ result(\"crear_incidente_jira\")[\"key\"] }}]({{ result(\"crear_incidente_jira\")[\"url\"] }})\n",
+        "eventName": "Jira: {{ result(\"crear_incidente_jira\")[\"key\"] }} - {{ event()[\"event.name\"] }}",
+        "problemId": "{{ event()[\"event.id\"] }}",
+        "url": "{{ result(\"crear_incidente_jira\")[\"url\"] }}"
+      },
+      "name": "anotar_problema_con_jira",
+      "position": {
+        "x": 1,
+        "y": 3
+      },
+      "predecessors": [
+        "crear_incidente_jira"
+      ]
+    },
+    "buscar_incidente_existente": {
+      "action": "dynatrace.jira:jira-jql-search",
+      "description": "Busca en Jira un incidente abierto para este problema",
+      "input": {
+        "connectionId": "",
+        "expand": [],
+        "fields": [],
+        "jql": "statusCategory != Done\nAND (\n  summary ~ \"{{ event()['display_id'] }}\"\n  OR labels = \"{{ event()['display_id'] }}\"\n)"
+      },
+      "name": "buscar_incidente_existente",
+      "position": {
+        "x": -1,
+        "y": 1
+      },
+      "predecessors": []
+    },
+    "comentar_incidente_existente": {
+      "action": "dynatrace.jira:jira-add-comment",
+      "active": true,
+      "conditions": {
+        "custom": "{{ result(\"buscar_incidente_existente\") | length != 0 }}",
+        "else": "SKIP",
+        "states": {
+          "buscar_incidente_existente": "OK",
+          "resumen_del_incidente": "ANY"
+        }
+      },
+      "description": "Agrega comentario de recurrencia al incidente existente",
+      "input": {
+        "comment": "h3. Recurrencia del problema detectada\n\n{% set r = result(\"resumen_del_incidente\") %}{% set s = r[\"text\"] if (r and r[\"text\"]) else \"\" %}{% if s and \"sorry\" not in s[:40] %}*Resumen:* {{ s.split(\"*Nota\")[0].split(\"Nota\")[0].split(\"---\")[0] | trim | replace(\"**\",\"*\") }}\n{% endif %}\nSe detectó una nueva ocurrencia de este problema.\n\n*ID del problema:* {{ event()[\"display_id\"] }}\n*Nombre:* {{ event()[\"event.name\"] }}\n*Estado:* {{ event()[\"event.status\"] }}\n*Categoría:* {{ event()[\"event.category\"] }}\n*Detectado:* {{ event()[\"timestamp\"] }}\n*Ver problema en DT:* [{{ event()[\"display_id\"] }}|{{ environment().url }}/ui/apps/dynatrace.davis.problems/problem/{{ event()[\"event.id\"] }}]\n\n----\n\n{{ event()[\"event.description\"] }}\n",
+        "connectionId": "",
+        "issueID": "{{ result(\"buscar_incidente_existente\")[0][\"key\"] }}"
+      },
+      "name": "comentar_incidente_existente",
+      "position": {
+        "x": 0,
+        "y": 2
+      },
+      "predecessors": [
+        "buscar_incidente_existente",
+        "resumen_del_incidente"
+      ]
+    },
+    "crear_incidente_jira": {
+      "action": "dynatrace.jira:jira-create-issue",
+      "active": true,
+      "conditions": {
+        "custom": "{{ result(\"buscar_incidente_existente\") | length == 0 }}",
+        "else": "SKIP",
+        "states": {
+          "buscar_incidente_existente": "OK",
+          "resumen_del_incidente": "ANY"
+        }
+      },
+      "description": "Crea el incidente en Jira cuando no existe uno abierto",
+      "input": {
+        "components": [],
+        "connectionId": "",
+        "description": "{% set r = result(\"resumen_del_incidente\") %}{% set s = r[\"text\"] if (r and r[\"text\"]) else \"\" %}{% if s and \"sorry\" not in s[:40] %}h2. Resumen\n\n{{ s.split(\"*Nota\")[0].split(\"Nota\")[0].split(\"---\")[0] | trim | replace(\"**\",\"*\") }}\n\n----\n\n{% endif %}h2. Resumen del problema\n\n*ID del problema:* {{ event()[\"display_id\"] }}\n*Nombre:* {{ event()[\"event.name\"] }}\n*Estado:* {{ event()[\"event.status\"] }}\n*Categoría:* {{ event()[\"event.category\"] }}\n*Inicio:* {{ event()[\"event.start\"] }}\n*Ver problema en DT:* [{{ event()[\"display_id\"] }}|{{ environment().url }}/ui/apps/dynatrace.davis.problems/problem/{{ event()[\"event.id\"] }}]\n\n----\n\nh2. Impacto\n\n*Tipos de entidad afectados:* {{ event()[\"affected_entity_types\"] | join(\", \") }}\n*IDs de entidades afectadas:* {{ event()[\"affected_entity_ids\"] | join(\", \") }}\n*Nivel de impacto:* {{ event()[\"dt.davis.impact_level\"] | join(\", \") }}\n\n----\n\nh2. Detalle\n\n{{ event()[\"event.description\"] }}\n\n----\n\nh2. Metadatos\n\n*En mantenimiento:* {{ event()[\"maintenance.is_under_maintenance\"] }}\n*Evento frecuente:* {{ event()[\"dt.davis.is_frequent_event\"] }}\n*IDs de eventos relacionados:* {{ event()[\"dt.davis.event_ids\"] | join(\", \") }}\n",
+        "fieldSetters": [],
+        "issueType": {
+          "id": ""
+        },
+        "labels": [
+          "{{ event()[\"display_id\"] }}",
+          "dynatrace"
+        ],
+        "project": {
+          "id": ""
+        },
+        "summary": "[{{ event()[\"display_id\"] }}] {{ event()[\"event.name\"] }}"
+      },
+      "name": "crear_incidente_jira",
+      "position": {
+        "x": 1,
+        "y": 2
+      },
+      "predecessors": [
+        "buscar_incidente_existente",
+        "resumen_del_incidente"
+      ]
+    },
+    "resumen_del_incidente": {
+      "action": "dynatrace.davis.workflow.actions:prompt-generative-ai",
+      "description": "Genera con IA un resumen muy corto del problema en español",
+      "input": {
+        "autoTrim": true,
+        "config": "disabled",
+        "instruction": "Eres un ingeniero SRE. Con los datos del problema de Dynatrace que se entregan, escribe un resumen MUY corto en español, si incluyes timestamp UTC-5: máximo 2 frases y 300 caracteres, sin saludos y sin viñetas.\nReglas:\n- Usa únicamente la información recibida del problema; no inventes causas, métricas ni datos.\n- Conserva EXACTAMENTE tal como vienen los nombres de servicios, entidades, hosts, aplicaciones, métricas e IDs (no los traduzcas ni los modifiques).\n- Indica qué ocurre, qué está afectado y la severidad o categoría si están disponibles.\n- No agregues notas, avisos ni aclaraciones sobre idioma o soporte (por ejemplo, no incluyas «Nota: Dynatrace Assist está oficialmente soportado solo en inglés»). Responde solo con el resumen.\n- Da formato con la sintaxis wiki de Jira (NO Markdown): resalta lo importante con *negrita* usando UN solo asterisco a cada lado (por ejemplo *AP73SBCC08*, *CPU superior al 95%*, *P-26115*). Resalta en negrita los nombres de servicios/hosts, el ID del problema, la métrica o valor clave y la severidad/estado. No uses dobles asteriscos, encabezados (#) ni enlaces en formato Markdown.\n- En negrita pon solo el nombre exacto (por ejemplo *AP73SBCC08*), sin palabras adicionales dentro de los asteriscos.",
+        "prompt": "Resume este problema de Dynatrace",
+        "supplementary": "ID del problema: {{ event()[\"display_id\"] }}\nNombre: {{ event()[\"event.name\"] }}\nCategoría: {{ event()[\"event.category\"] }}\nEstado: {{ event()[\"event.status\"] }}\nInicio: {{ event()[\"event.start\"] }}\nTipos de entidad afectados: {{ event()[\"affected_entity_types\"] | join(\", \") }}\nEntidades afectadas: {{ event()[\"affected_entity_ids\"] | join(\", \") }}\nNivel de impacto: {{ event()[\"dt.davis.impact_level\"] | join(\", \") }}\nDescripción: {{ event()[\"event.description\"] }}"
+      },
+      "name": "resumen_del_incidente",
+      "position": {
+        "x": 1,
+        "y": 1
+      },
+      "predecessors": []
+    }
+  }
+}
