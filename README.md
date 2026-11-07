@@ -1,8 +1,6 @@
 # Dynatrace → Jira: automatic incident from problems
 
-A Dynatrace Automations workflow that creates a Jira incident when Dynatrace Intelligence detects a problem, including a short AI-generated summary. If the problem recurs, it comments on the existing ticket instead of creating a duplicate.
-
-Based on the Dynatrace templates "Auto-track problem errors in Jira" and "[ServiceNow] Creates a incident based on problem trigger".
+A Dynatrace Automations workflow that creates a Jira incident when Dynatrace Intelligence detects a problem, including a short AI-generated summary. After creating the ticket, it comments on the Dynatrace problem with the Jira ticket ID and link. If the problem recurs, it comments on the existing ticket instead of creating a duplicate.
 
 ## Files
 
@@ -26,7 +24,7 @@ Dynatrace Intelligence problem (CREATED / UPDATED / REOPENED)
         │                        │
  create_jira_incident    comment_on_existing_incident
         │
- annotate_problem_with_jira   (Jira link → problem in Dynatrace)
+ annotate_problem_with_jira   (comment on the problem with ticket ID + link)
 ```
 
 1. **Trigger:** active Dynatrace Intelligence problems (availability, error, slowdown, resource contention, custom alert and monitoring unavailable), excluding duplicates.
@@ -35,12 +33,12 @@ Dynatrace Intelligence problem (CREATED / UPDATED / REOPENED)
    - If this task fails, the ticket is still created, just without the summary block.
 4. **Create ticket:** if no open ticket exists, creates the incident with the summary, problem details, a link to the problem in Dynatrace, impact, description and metadata. It adds the labels `<problem ID>` and `dynatrace`.
 5. **Comment:** if a ticket already exists, adds a recurrence comment with the summary and the link.
-6. **Annotate the problem:** adds a link to the Jira ticket on the problem in Dynatrace.
+6. **Comment on the Dynatrace problem:** right after the ticket is created, the problem in Dynatrace is annotated with the Jira ticket **ID** (for example `ABC-123`) and a clickable **link** to it, so anyone viewing the problem can jump straight to the ticket.
 
 ## How to use it
 
 1. Make sure you have a Jira connection in Dynatrace (**Settings → Connections → Jira**) with permission to search and create issues.
-2. Deploy the template (pick your language):
+2. Deploy the template (pick your language). You can either upload the JSON file directly in the Dynatrace UI (**Workflows → Upload**) or use `dtctl`:
 
    ```bash
    dtctl apply -f workflow-jira-en.json
